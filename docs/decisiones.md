@@ -89,3 +89,25 @@ sigue estas reglas de "buen ciudadano":
    ya que la API no expone headers de `Cache-Control`.
 5. **Horario fuera de peak**: ejecución programada de madrugada (hora Chile).
 6. **Backoff en fallos**: reintentos con backoff exponencial, nunca reintento agresivo en loop.
+
+---
+
+## 8. Monitoreo y alertas: Cloud Logging + Monitoring (no un agente LLM, por ahora)
+
+**Decisión**: las alertas de fallos del pipeline se implementan con **Cloud Logging +
+Cloud Monitoring (log-based alerting)**, notificando por correo electrónico.
+
+**Alternativa considerada**: un agente basado en LLM que lea los logs y genere un
+diagnóstico/resumen inteligente de fallos.
+
+**Por qué**: el mecanismo nativo de GCP (logs estructurados -> alerting policy -> notificación)
+cubre el caso real necesario ("avisar cuando algo falla") de forma robusta, gratuita (dentro de
+la cuota gratis de Cloud Logging, 50 GB/mes) y sin agregar complejidad adicional al pipeline
+core. Es además el patrón estándar usado en la industria para monitoreo básico.
+
+**Pendiente futuro (fuera del alcance actual)**: un agente de diagnóstico de logs basado en
+LLM (Vertex AI/Gemini o API de Claude) que interprete fallos recurrentes y sugiera causas
+(ej. "el código 506 lleva 3 días fallando con timeout, posible cambio en el endpoint de
+origen"). Técnicamente viable sin tocar el crédito principal de GCP (Vertex AI tiene cuota
+gratuita separada), pero se deja como extensión posterior al pipeline base, para no mezclar
+la construcción del sistema principal con la de un segundo sistema de diagnóstico.
