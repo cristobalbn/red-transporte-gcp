@@ -55,3 +55,37 @@ Registro de decisiones técnicas tomadas durante el desarrollo del proyecto, con
 **Decisión**: todos los servicios de Cloud Run se empaquetan como imágenes Docker, gestionadas vía Artifact Registry.
 
 **Por qué**: es un requisito técnico de Cloud Run (ejecuta contenedores, no código suelto), y además garantiza reproducibilidad entre entorno local y GCP, además de ser una habilidad transversal muy demandada en el mercado.
+
+---
+
+## 7. Cloud Run Jobs (no Service) para el ingestor
+
+**Decisión**: el ingestor se implementa como **Cloud Run Job**, no como Cloud Run Service.
+
+**Alternativa considerada**: Cloud Run Service, disparado por HTTP desde Cloud Scheduler.
+
+**Por qué**: el ingestor necesita llamar el endpoint `conocerecorrido` una vez por cada uno de
+los 417 códigos de servicio, aplicando throttling de ~1 request/segundo por respeto al backend
+de red.cl (ver sección "Buenas prácticas hacia la API de red.cl" más abajo). Esto implica una
+ejecución de varios minutos, lo cual no calza con el modelo request/response de Cloud Run
+Service (pensado para respuestas rápidas). Cloud Run Jobs está diseñado para tareas tipo batch
+de duración variable, sin el límite de timeout ajustado de un servicio HTTP, y de todas formas
+puede ser disparado por Cloud Scheduler (vía la API de Jobs).
+
+---
+
+## Buenas prácticas hacia la API de red.cl
+
+Como red.cl no es una API pública oficial (es un endpoint interno reverse-engineered del
+propio sitio, corriendo sobre un servidor HTTP básico y aparentemente frágil), el pipeline
+sigue estas reglas de "buen ciudadano":
+
+1. **Throttling**: máximo 1 request/segundo, aunque no se haya detectado un límite explícito.
+2. **Identificación honesta**: User-Agent propio (`red-transporte-gcp-portfolio-project/1.0`),
+   sin simular ser un navegador.
+3. **Frecuencia de ingesta baja**: el pipeline completo corre a lo sumo una vez al día (a
+   evaluar si incluso menos, dado que los datos de rutas/paraderos cambian poco).
+4. **Caché propio**: no se vuelve a pedir un recorrido ya obtenido en la ejecución del día,
+   ya que la API no expone headers de `Cache-Control`.
+5. **Horario fuera de peak**: ejecución programada de madrugada (hora Chile).
+6. **Backoff en fallos**: reintentos con backoff exponencial, nunca reintento agresivo en loop.
